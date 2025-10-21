@@ -3,7 +3,6 @@ const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const cors = require('cors');
-const path = require('path'); // path मॉड्यूल को जोड़ें
 
 // Express ऐप को इनिशियलाइज़ करें
 const app = express();
@@ -12,21 +11,7 @@ const PORT = process.env.PORT || 3000;
 // CORS मिडलवेयर का उपयोग करें
 app.use(cors());
 
-// --- नए रूट जोड़ें ---
-
-// होम रूट पर एक वेलकम मैसेज दिखाएं
-app.get('/', (req, res) => {
-    res.send('Welcome! Go to /test to use the API tester.');
-});
-
-// टेस्टिंग पेज सर्व करने के लिए रूट
-app.get('/test', (req, res) => {
-    res.sendFile(path.join(__dirname, 'test.html'));
-});
-
-// ----------------------
-
-// एक GET रूट '/api/transcript' बनाएँ
+// एक GET रूट '/api/transcript' बनाएँ (सिर्फ API लॉजिक)
 app.get('/api/transcript', async (req, res) => {
     const { v } = req.query;
 
