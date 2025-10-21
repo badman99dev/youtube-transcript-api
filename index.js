@@ -6,10 +6,8 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS को इनेबल करें ताकि कोई भी फ्रंटएंड इसे कॉल कर सके
 app.use(cors());
 
-// होमपेज रूट (/) - यह बताएगा कि API का उपयोग कैसे करें
 app.get('/', (req, res) => {
     res.status(200).json({
         message: "Welcome to the YouTube Transcript & Details API!",
@@ -18,7 +16,6 @@ app.get('/', (req, res) => {
     });
 });
 
-// मुख्य API रूट
 app.get('/api/transcript', async (req, res) => {
     const { v } = req.query;
 
@@ -30,7 +27,6 @@ app.get('/api/transcript', async (req, res) => {
     const transcriptUrl = `https://youtubetotranscript.com/transcript?v=${v}`;
 
     try {
-        // दोनों रिक्वेस्ट एक साथ भेजें, लेकिन अगर एक फेल हो तो भी दूसरी का इंतजार करें
         const promises = [
             axios.get(metadataUrl),
             axios.get(transcriptUrl)
@@ -38,25 +34,37 @@ app.get('/api/transcript', async (req, res) => {
         
         const [metadataPromise, transcriptPromise] = await Promise.allSettled(promises);
 
-        // --- वीडियो डिटेल्स को प्रोसेस करें ---
         if (metadataPromise.status === 'rejected' || !metadataPromise.value.data.valid) {
             return res.status(404).json({ success: false, error: 'Video not found or details could not be retrieved.' });
         }
         const metadata = metadataPromise.value.data;
         
-        // --- ट्रांसक्रिप्ट को प्रोसेस करें ---
-        let fullTranscript = null; // null का मतलब है कि ट्रांसक्रिप्ट उपलब्ध नहीं है
+        // --- ट्रांसक्रिप्ट लॉजिक को यहाँ बदला गया है ---
+        let transcriptArray = null; // null का मतलब है कि ट्रांसक्रिप्ट उपलब्ध नहीं है
+
         if (transcriptPromise.status === 'fulfilled') {
             const html = transcriptPromise.value.data;
             const $ = cheerio.load(html);
             const transcriptSegments = $('div#transcript span.transcript-segment');
             
             if (transcriptSegments.length > 0) {
-                const allText = transcriptSegments.map((i, el) => $(el).text().trim()).get();
-                fullTranscript = allText.join(' ');
+                // खाली अरे बनाएँ
+                transcriptArray = [];
+                
+                // हर हिस्से पर लूप चलाएँ
+                transcriptSegments.each((index, element) => {
+                    // टेक्स्ट और 'data-start' एट्रिब्यूट दोनों निकालें
+                    const text = $(element).text().trim();
+                    const start = $(element).attr('data-start');
+                    
+                    // अरे में ऑब्जेक्ट के रूप में डालें
+                    transcriptArray.push({
+                        text,
+                        start
+                    });
+                });
             }
         } else {
-            // अगर ट्रांसक्रिप्ट वाली साइट से एरर आए तो लॉग करें, पर API को फेल न करें
             console.warn(`Could not fetch transcript for video ID ${v}:`, transcriptPromise.reason.message);
         }
 
@@ -64,11 +72,10 @@ app.get('/api/transcript', async (req, res) => {
         res.status(200).json({
             success: true,
             ...metadata,
-            transcript: fullTranscript
+            transcript: transcriptArray // अब यह अरे है
         });
 
     } catch (error) {
-        // अगर कोई अप्रत्याशित एरर आता है
         console.error('Unexpected error:', error);
         res.status(500).json({ success: false, error: 'An internal server error occurred.' });
     }
