@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Transcript API</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 800px;
+        }
+        h1 {
+            color: #1877f2;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1.5rem;
+        }
+        #videoId {
+            flex-grow: 1;
+            padding: 10px 15px;
+            border: 1px solid #dddfe2;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        #submitBtn {
+            padding: 10px 20px;
+            background-color: #1877f2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #submitBtn:hover {
+            background-color: #166fe5;
+        }
+        #loader {
+            text-align: center;
+            display: none;
+            margin: 20px 0;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 1rem;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: "Courier New", Courier, monospace;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>YouTube Transcript API</h1>
+        <p style="text-align: center; margin-top: -1rem; margin-bottom: 1.5rem;">Enter a YouTube video ID to fetch its details and transcript.</p>
+        <div class="input-group">
+            <input type="text" id="videoId" placeholder="e.g., l58hKc239s8">
+            <button id="submitBtn">Fetch Data</button>
+        </div>
+        <div id="loader">Loading...</div>
+        <pre id="results">API response will be shown here...</pre>
+    </div>
+
+    <script>
+        const videoIdInput = document.getElementById('videoId');
+        const submitBtn = document.getElementById('submitBtn');
+        const resultsPre = document.getElementById('results');
+        const loader = document.getElementById('loader');
+
+        submitBtn.addEventListener('click', async () => {
+            const videoId = videoIdInput.value.trim();
+            if (!videoId) {
+                alert('Please enter a YouTube Video ID.');
+                return;
+            }
+            const apiUrl = `/api/transcript?v=${videoId}`;
+            loader.style.display = 'block';
+            resultsPre.textContent = '';
+            try {
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+                if (!response.ok) {
+                    resultsPre.textContent = `Error: ${data.error || 'Something went wrong'}`;
+                } else {
+                    resultsPre.textContent = JSON.stringify(data, null, 2);
+                }
+            } catch (error) {
+                resultsPre.textContent = `An unexpected error occurred: ${error.message}`;
+            } finally {
+                loader.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
