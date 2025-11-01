@@ -1,4 +1,4 @@
-// index.js (Corrected Version)
+// index.js (THE FINAL, ACTUALLY-WORKS VERSION)
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
@@ -6,18 +6,15 @@ const axios = require('axios');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
 app.use(cors());
-app.use(express.static('public')); // Hamare index.html ko serve karne ke liye
+app.use(express.static('public'));
 
-// Invidious API ka base URL
 const INVIDIOUS_API_BASE = 'https://inv.perditum.com/api/v1';
 const INVIDIOUS_DOMAIN = 'https://inv.perditum.com';
 
 // ==========================================================
-// HELPER FUNCTIONS (Har kaam ke liye alag function)
+// HELPER FUNCTIONS
 // ==========================================================
-
 async function getVideoDetails(videoId) {
     const response = await axios.get(`${INVIDIOUS_API_BASE}/videos/${videoId}`);
     return response.data;
@@ -28,20 +25,28 @@ async function getComments(videoId) {
     return response.data;
 }
 
+// === THIS FUNCTION IS NOW SMART AND RELIABLE ===
 async function getTranscript(videoId) {
     const captionsResponse = await axios.get(`${INVIDIOUS_API_BASE}/videos/${videoId}?fields=captions`);
     const captions = captionsResponse.data.captions;
 
     if (!captions || captions.length === 0) {
-        return { error: "No captions available for this video." };
+        throw new Error("No captions available for this video.");
     }
     
     const transcriptPath = captions[0].url;
     const fullTranscriptUrl = `${INVIDIOUS_DOMAIN}${transcriptPath}`;
     
     const transcriptResponse = await axios.get(fullTranscriptUrl);
-    // Vercel returns a different structure sometimes, so we check for the actual array
-    return transcriptResponse.data.lines ? transcriptResponse.data : { lines: transcriptResponse.data };
+    const transcriptData = transcriptResponse.data;
+
+    // This part finds the array of lines, no matter the structure, and returns JUST the array.
+    if (Array.isArray(transcriptData.captions)) return transcriptData.captions;
+    if (Array.isArray(transcriptData.lines)) return transcriptData.lines;
+    if (Array.isArray(transcriptData)) return transcriptData;
+
+    // If no array is found, it means the structure is unknown or empty.
+    throw new Error("Could not find a valid transcript array in the response.");
 }
 
 async function getChannelDetails(channelId) {
@@ -55,70 +60,46 @@ async function performSearch(query) {
 }
 
 // ==========================================================
-// ENDPOINT 1: /api/fetch (The Master Endpoint)
+// ENDPOINT 1: /api/fetch (This was always working)
 // ==========================================================
 app.get('/api/fetch', async (req, res) => {
     const { id: videoId, channel: channelId, search: query } = req.query;
     const fields = req.query.fields ? req.query.fields.split(',').map(f => f.trim()) : [];
-
-    if (!videoId && !channelId && !query) {
-        return res.status(400).json({ error: "An 'id', 'channel', or 'search' parameter is required." });
-    }
-
+    if (!videoId && !channelId && !query) { return res.status(400).json({ error: "An 'id', 'channel', or 'search' parameter is required." }); }
     try {
-        const tasks = [];
-        const responseKeys = [];
-
+        const tasks = []; const responseKeys = [];
         if (videoId) {
             if (fields.includes('details')) { tasks.push(getVideoDetails(videoId)); responseKeys.push('details'); }
             if (fields.includes('comments')) { tasks.push(getComments(videoId)); responseKeys.push('comments'); }
             if (fields.includes('transcript')) { tasks.push(getTranscript(videoId)); responseKeys.push('transcript'); }
         }
-        if (channelId && fields.includes('channel')) {
-            tasks.push(getChannelDetails(channelId));
-            responseKeys.push('channel');
-        }
-        if (query) {
-            tasks.push(performSearch(query));
-            responseKeys.push('search_results');
-        }
+        if (channelId && fields.includes('channel')) { tasks.push(getChannelDetails(channelId)); responseKeys.push('channel'); }
+        if (query) { tasks.push(performSearch(query)); responseKeys.push('search_results'); }
+        if (tasks.length === 0) { return res.status(400).json({ error: "No valid fields or parameters provided." }); }
         
-        if (tasks.length === 0) {
-            return res.status(400).json({ error: "No valid fields or parameters provided." });
-        }
-
         const results = await Promise.allSettled(tasks);
-
         const finalResponse = {};
         results.forEach((result, index) => {
             const key = responseKeys[index];
-            if (result.status === 'fulfilled') {
-                finalResponse[key] = result.value;
-            } else {
-                finalResponse[key] = { error: `Failed to fetch ${key}`, details: result.reason.message };
-            }
+            if (result.status === 'fulfilled') { finalResponse[key] = result.value; } 
+            else { finalResponse[key] = { error: `Failed to fetch ${key}`, details: result.reason.message }; }
         });
-
         res.json(finalResponse);
-
-    } catch (error) {
-        res.status(500).json({ error: "An unexpected server error occurred.", details: error.message });
-    }
+    } catch (error) { res.status(500).json({ error: "An unexpected server error occurred.", details: error.message }); }
 });
 
-
 // ==========================================================
-// ENDPOINT 2: /api/analyze_video (The LLM-Friendly Endpoint)
+// ENDPOINT 2: /api/analyze_video (Now simple and robust)
 // ==========================================================
 
-const formatNumber = (num) => num ? new Intl.NumberFormat('en-US').format(num) : "N/A";
+const formatNumber = (num) => num != null ? new Intl.NumberFormat('en-US').format(num) : "N/A";
 const formatDate = (dateString) => dateString ? new Date(dateString).toISOString().split('T')[0] : "N/A";
 
 async function generateLlmReport(videoId) {
     const results = await Promise.allSettled([
         getVideoDetails(videoId),
         getComments(videoId),
-        getTranscript(videoId)
+        getTranscript(videoId) // This now returns a clean array or fails.
     ]);
     
     const detailsResult = results[0];
@@ -126,28 +107,34 @@ async function generateLlmReport(videoId) {
     const transcriptResult = results[2];
 
     if (detailsResult.status === 'rejected') {
-        return `Error: Could not fetch video details for ID ${videoId}. Reason: ${detailsResult.reason.message}`;
+        return `Fatal Error: Could not fetch video details for ID ${videoId}. Reason: ${detailsResult.reason.message}`;
     }
-
     const details = detailsResult.value;
-    
+
     let channelDetails = {};
     if (details.authorId) {
-        try { channelDetails = await getChannelDetails(details.authorId); } catch (e) { /* Ignore */ }
+        try { channelDetails = await getChannelDetails(details.authorId); } catch (e) { /* Fails silently */ }
     }
     
-    // === THE FIX IS HERE ===
-    const transcriptText = transcriptResult.status === 'fulfilled' && Array.isArray(transcriptResult.value.lines)
-        ? transcriptResult.value.lines.map(line => `(${(line.offset / 1000).toFixed(2)}s) ${line.text}`).join('\n')
-        : "Transcript not available.";
+    let transcriptText = "Transcript not available.";
+    // This logic is now SIMPLE because getTranscript is reliable.
+    if (transcriptResult.status === 'fulfilled') {
+        const transcriptLines = transcriptResult.value; // This is GUARANTEED to be an array.
+        transcriptText = transcriptLines.map(line => {
+            const timestampInSeconds = (line.start ?? line.offset ?? 0) / 1000;
+            const text = line.text || '';
+            return `(${timestampInSeconds.toFixed(2)}s) ${text.trim()}`;
+        }).join('\n');
+    }
 
-    const topCommentsText = commentsResult.status === 'fulfilled' && Array.isArray(commentsResult.value.comments)
-        ? commentsResult.value.comments
-            .sort((a, b) => b.likeCount - a.likeCount)
+    let topCommentsText = "No comments available or failed to fetch.";
+    if (commentsResult.status === 'fulfilled' && Array.isArray(commentsResult.value.comments)) {
+        topCommentsText = commentsResult.value.comments
+            .sort((a, b) => (b.likeCount || 0) - (a.likeCount || 0))
             .slice(0, 3)
             .map(c => `- **Top Comment (${formatNumber(c.likeCount)} likes):** ${c.content ? c.content.trim() : ''}`)
-            .join('\n')
-        : "No comments available or failed to fetch.";
+            .join('\n');
+    }
 
     return `
 **YouTube Video Analysis Report**
@@ -178,15 +165,13 @@ ${topCommentsText}
 
 app.get('/api/analyze_video', async (req, res) => {
     const { v: videoId } = req.query;
-     if (!videoId) {
-        return res.status(400).json({ error: "A video ID is required. Use ?v=VIDEO_ID" });
-    }
+     if (!videoId) { return res.status(400).json({ error: "A video ID is required. Use ?v=VIDEO_ID" }); }
     try {
         const report = await generateLlmReport(videoId);
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.send(report);
     } catch (error) {
-        res.status(500).send(`An unexpected error occurred: ${error.message}`);
+        res.status(500).send(`An unexpected server error occurred: ${error.message}`);
     }
 });
 
