@@ -1,4 +1,4 @@
-// index.js
+// index.js (Corrected Version)
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
@@ -29,7 +29,6 @@ async function getComments(videoId) {
 }
 
 async function getTranscript(videoId) {
-    // Transcript ke liye 2 step lagte hain: pehle caption URL nikalna, fir usko fetch karna
     const captionsResponse = await axios.get(`${INVIDIOUS_API_BASE}/videos/${videoId}?fields=captions`);
     const captions = captionsResponse.data.captions;
 
@@ -37,12 +36,12 @@ async function getTranscript(videoId) {
         return { error: "No captions available for this video." };
     }
     
-    // Pehla available caption URL le lo
     const transcriptPath = captions[0].url;
     const fullTranscriptUrl = `${INVIDIOUS_DOMAIN}${transcriptPath}`;
     
     const transcriptResponse = await axios.get(fullTranscriptUrl);
-    return transcriptResponse.data;
+    // Vercel returns a different structure sometimes, so we check for the actual array
+    return transcriptResponse.data.lines ? transcriptResponse.data : { lines: transcriptResponse.data };
 }
 
 async function getChannelDetails(channelId) {
@@ -70,7 +69,6 @@ app.get('/api/fetch', async (req, res) => {
         const tasks = [];
         const responseKeys = [];
 
-        // User ne jo jo maanga hai, uske tasks (promises) banao
         if (videoId) {
             if (fields.includes('details')) { tasks.push(getVideoDetails(videoId)); responseKeys.push('details'); }
             if (fields.includes('comments')) { tasks.push(getComments(videoId)); responseKeys.push('comments'); }
@@ -89,11 +87,8 @@ app.get('/api/fetch', async (req, res) => {
             return res.status(400).json({ error: "No valid fields or parameters provided." });
         }
 
-        // Saare tasks parallel me run karo aur result ka intezar karo
-        // Promise.allSettled() use kar rahe hain taaki agar ek request fail ho to baaki chalti rahein
         const results = await Promise.allSettled(tasks);
 
-        // Final response taiyar karo
         const finalResponse = {};
         results.forEach((result, index) => {
             const key = responseKeys[index];
@@ -116,12 +111,10 @@ app.get('/api/fetch', async (req, res) => {
 // ENDPOINT 2: /api/analyze_video (The LLM-Friendly Endpoint)
 // ==========================================================
 
-// Report ke liye helper functions
 const formatNumber = (num) => num ? new Intl.NumberFormat('en-US').format(num) : "N/A";
 const formatDate = (dateString) => dateString ? new Date(dateString).toISOString().split('T')[0] : "N/A";
 
 async function generateLlmReport(videoId) {
-    // Ek saath details, comments, aur transcript fetch karo
     const results = await Promise.allSettled([
         getVideoDetails(videoId),
         getComments(videoId),
@@ -138,25 +131,21 @@ async function generateLlmReport(videoId) {
 
     const details = detailsResult.value;
     
-    // Channel details alag se nikalo
     let channelDetails = {};
     if (details.authorId) {
-        try {
-            channelDetails = await getChannelDetails(details.authorId);
-        } catch (e) { /* Ignore error if channel details fail */ }
+        try { channelDetails = await getChannelDetails(details.authorId); } catch (e) { /* Ignore */ }
     }
     
-    // Transcript text format karo
-    const transcriptText = transcriptResult.status === 'fulfilled' && !transcriptResult.value.error
-        ? transcriptResult.value.map(line => `(${line.offset / 1000}s) ${line.text}`).join('\n')
+    // === THE FIX IS HERE ===
+    const transcriptText = transcriptResult.status === 'fulfilled' && Array.isArray(transcriptResult.value.lines)
+        ? transcriptResult.value.lines.map(line => `(${(line.offset / 1000).toFixed(2)}s) ${line.text}`).join('\n')
         : "Transcript not available.";
 
-    // Top comments format karo
-    const topCommentsText = commentsResult.status === 'fulfilled' && commentsResult.value.comments
+    const topCommentsText = commentsResult.status === 'fulfilled' && Array.isArray(commentsResult.value.comments)
         ? commentsResult.value.comments
             .sort((a, b) => b.likeCount - a.likeCount)
             .slice(0, 3)
-            .map(c => `- **Top Comment (${formatNumber(c.likeCount)} likes):** ${c.content.trim()}`)
+            .map(c => `- **Top Comment (${formatNumber(c.likeCount)} likes):** ${c.content ? c.content.trim() : ''}`)
             .join('\n')
         : "No comments available or failed to fetch.";
 
@@ -175,7 +164,7 @@ async function generateLlmReport(videoId) {
 - **Channel ID:** ${details.authorId || 'N/A'}
 
 **3. Video Description:**
-${details.description || 'No description provided.'}
+${details.description ? details.description.trim() : 'No description provided.'}
 
 **4. Video Transcript (What is being said):**
 ${transcriptText}
@@ -201,8 +190,6 @@ app.get('/api/analyze_video', async (req, res) => {
     }
 });
 
-
-// Server start karo
 app.listen(PORT, () => {
     console.log(`🚀 Server is running on http://localhost:${PORT}`);
 });
