@@ -535,4 +535,18 @@ app.get('/api/analyze_search', async (req, res) => {
         return res.status(400).json({ error: "Ek search query 'q' zaroori hai." });
     }
     try {
-        const report = await gene
+        const report = await generateLlmSearchReport(query);
+        res.json(report);
+    } catch (error) {
+        res.status(500).json({ error: `Search ke dauran anapekshit galti hui: ${error.message}` });
+    }
+});
+
+
+// ==========================================================
+//  6. SERVER SHURU KAREIN
+// ==========================================================
+app.listen(PORT, () => {
+    console.log(`🚀 Server http://localhost:${PORT} par chal raha hai`);
+});
+```
