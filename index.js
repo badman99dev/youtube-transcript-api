@@ -1,7 +1,7 @@
 // index.js
 const express = require('express');
 const axios = require('axios');
-const cors = require('cors');
+const cors = require('cors'); // CORS को इम्पोर्ट करना
 const { JSDOM } = require('jsdom');
 const { Readability } = require('@mozilla/readability');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -12,9 +12,20 @@ require('dotenv').config();
 
 // --- Express App Setup ---
 const app = express();
-app.use(cors()); // CORS को Allow करना
+
+// =================================================================
+// >> यह सबसे महत्वपूर्ण हिस्सा है CORS के लिए <<
+// इसे सभी API राउट्स से पहले होना चाहिए
+app.use(cors()); 
+// =================================================================
+
 app.use(express.json());
 app.use(express.static('public')); // Frontend फाइलों को सर्व करना
+
+// ... (बाकी का पूरा कोड वैसा ही रहेगा जैसा मैंने पिछले जवाब में दिया था) ...
+// (ANALYTICS LOGIC, PROMPTS AND CORE API LOGIC, API ENDPOINTS, START SERVER)
+// ... (कृपया सुनिश्चित करें कि बाकी का पूरा कोड नीचे मौजूद है) ...
+
 
 // ===================================================================
 // ANALYTICS LOGIC (analytics.js से सीधे यहाँ लाया गया)
@@ -67,7 +78,7 @@ async function getLastNDaysAvgTimeData(n = 14) {
 const PROMPT_NORMAL = `Based on the user's original query, provide a concise summary... USER'S QUERY: "{query}" TEXT TO SUMMARIZE: --- {context_text} ---`;
 const PROMPT_DEEP = `As a meticulous research analyst... **Current Date:** {current_date}. **User's Original Query:** "{query}" ... **Provided Search Results:** --- {context_text} ---`;
 
-async function searchWebLogic(query, serperApiKey, searchType, numResults) { /* ... (This function is large, so keeping it folded for brevity, but the logic is identical to the original) ... */ 
+async function searchWebLogic(query, serperApiKey, searchType, numResults) { 
     const startTime = Date.now();
     if (!serperApiKey) return { error: "Error: Serper API Key is required." };
     const endpoint = searchType === "news" ? "https://google.serper.dev/news" : "https://google.serper.dev/search";
