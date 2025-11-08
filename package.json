@@ -1,15 +1,19 @@
 {
-  "name": "youtube-transcript-api-pure",
+  "name": "web-search-and-summarize-api",
   "version": "1.0.0",
-  "description": "A robust API to get YouTube video details and transcript.",
+  "description": "A Node.js API to search the web, scrape content, and summarize using AI.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
+    "express": "^4.19.2",
     "axios": "^1.7.2",
-    "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
-    "express": "^4.19.2"
+    "dotenv": "^16.4.5",
+    "@google/generative-ai": "^0.12.0",
+    "@mozilla/readability": "^0.5.0",
+    "jsdom": "^24.1.0",
+    "proper-lockfile": "^4.1.2"
   }
 }
